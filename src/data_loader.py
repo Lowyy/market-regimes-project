@@ -20,8 +20,8 @@ def download_raw_data(start_date: str, end_date: str) -> pd.DataFrame:
     sp500 = yf.download('^GSPC', start=start_date, end=end_date)
     vix = yf.download('^VIX', start=start_date, end=end_date)
 
-    # Concatenate dataframes and drop NaN values
-    df = pd.concat([sp500, vix], axis=1).dropna()
+    # Concatenate dataframes
+    df = pd.concat([sp500, vix], axis=1)
 
     return df
 
