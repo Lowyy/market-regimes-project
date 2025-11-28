@@ -17,6 +17,7 @@ def ensure_directories():
 def download_raw_data(start_date: str, end_date: str) -> pd.DataFrame:
     """ Download daily data for S&P 500 and VIX from Yahoo Finance
     and return a merged dataframe."""
+    ensure_directories()
     sp500 = yf.download('^GSPC', start=start_date, end=end_date)
     vix = yf.download('^VIX', start=start_date, end=end_date)
 
