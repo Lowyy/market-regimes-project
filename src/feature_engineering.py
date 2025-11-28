@@ -175,18 +175,6 @@ def add_spx_vix_features(df: pd.DataFrame) -> pd.DataFrame:
     df['RSI_20'] = calculate_rsi(close, window=20)
 
     # ------------------------------------------------------------
-    # Stationarity features: ADF and KPSS p-values
-    # ------------------------------------------------------------
-    df['adf_log_return_pvalue'] = df['log_daily_return'].rolling(252).apply(
-        adf_test,
-        raw=False
-    )
-    df['kpss_log_return_pvalue'] = df['log_daily_return'].rolling(252).apply(
-        kpss_test,
-        raw=False
-    )
-
-    # ------------------------------------------------------------
     # Hurst exponent feature
     # ------------------------------------------------------------
     df['hurst_100d'] = hurst_exponent(df['log_daily_return'], 100)
