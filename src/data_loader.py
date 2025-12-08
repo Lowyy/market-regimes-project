@@ -26,32 +26,37 @@ def download_raw_data(start_date: str, end_date: str) -> pd.DataFrame:
 
     return df
 
-def save_raw_data(df: pd.DataFrame, filename: str = "raw_data.csv") -> Path:
-    """ Save the raw data to a CSV file. """
+# We use Parquet because it is a better file format for storing data, being more efficient in terms of both
+# storage space and speed when reading and writing data compared to csv.
+
+def save_raw_data(df: pd.DataFrame, filename: str = "raw_data.parquet") -> Path:
+    """Save raw data to Parquet."""
+    ensure_directories()
     raw_file_path = RAW_DIR / filename
-    df.to_csv(raw_file_path)
+    df.to_parquet(raw_file_path)
     print(f"Raw data saved to {raw_file_path}")
     return raw_file_path
 
-def load_raw_data(filename: str = "raw_data.csv") -> pd.DataFrame:
-    """ Load raw data from a CSV file. """
+
+def load_raw_data(filename: str = "raw_data.parquet") -> pd.DataFrame:
+    """Load raw data from Parquet."""
     raw_file_path = RAW_DIR / filename
-    df = pd.read_csv(raw_file_path, index_col=0, parse_dates=True)
+    df = pd.read_parquet(raw_file_path)
     print(f"Raw data loaded from {raw_file_path}")
     return df
 
-def save_processed_data(df: pd.DataFrame, filename: str = "processed_data.parquet") -> Path:
-    """ Save the processed data to a parquet file."""
-    # We use Parquet because it is a better file format for storing data, being more efficient in terms of both
-    # storage space and speed when reading and writing data compared to csv.
 
+def save_processed_data(df: pd.DataFrame, filename: str = "processed_data.parquet") -> Path:
+    """Save processed data to Parquet."""
+    ensure_directories()
     processed_file_path = PROCESSED_DIR / filename
     df.to_parquet(processed_file_path)
     print(f"Processed data saved to {processed_file_path}")
     return processed_file_path
 
+
 def load_processed_data(filename: str = "processed_data.parquet") -> pd.DataFrame:
-    """ Load processed data from a parquet file. """
+    """Load processed data from Parquet."""
     processed_file_path = PROCESSED_DIR / filename
     df = pd.read_parquet(processed_file_path)
     print(f"Processed data loaded from {processed_file_path}")
