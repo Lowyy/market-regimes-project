@@ -77,32 +77,26 @@ def align_data_for_strategies(df, pred_regime_today):
 # 3. STRATEGY DEFINITIONS
 # ==========================================================================================
 
-# ----------------------------------------
 # Strategy 1 — baseline, long in regime 1
-# ----------------------------------------
 def strategy_1(idx, data):
     pos = pd.Series(0.0, index=idx)
-    pos[data["reg1"]] = 1.0
+    pos[data["reg0"]] = 1.0
     return pos
 
 
-# ----------------------------------------
 # Strategy 2 — momentum strategy
-# ----------------------------------------
 def strategy_2(idx, data):
     pos = pd.Series(0.0, index=idx)
 
-    long_mom = data["reg1"] & (data["sma50"] > 0) & data["rsi"].between(50, 70)
-    short_mom = data["reg0"] & (data["sma50"] < 0) & data["rsi"].between(30, 40)
+    long_mom = data["reg0"] & (data["sma50"] > 0) & data["rsi"].between(50, 70)
+    short_mom = data["reg1"] & (data["sma50"] < 0) & data["rsi"].between(30, 40)
 
     pos[long_mom] = 1.0
     pos[short_mom] = -1.0
     return pos
 
 
-# ----------------------------------------
 # Strategy 3A — regime 0 mean reversion
-# ----------------------------------------
 def strategy_3A(idx, data):
     pos = pd.Series(0.0, index=idx)
 
@@ -118,14 +112,12 @@ def strategy_3A(idx, data):
         (data["vrp"] < 0)
     )
 
-    pos[data["reg0"] & long_3A] = 1.0
-    pos[data["reg0"] & short_3A] = -1.0
+    pos[data["reg1"] & long_3A] = 1.0
+    pos[data["reg1"] & short_3A] = -1.0
     return pos
 
 
-# ----------------------------------------
 # Strategy 3B — regime 1 filtered long
-# ----------------------------------------
 def strategy_3B(idx, data):
     pos = pd.Series(0.0, index=idx)
 
@@ -133,13 +125,11 @@ def strategy_3B(idx, data):
         data["vix_z"].rolling(5).max() < 2
     ) & (data["vol_ratio"] > 0.6)
 
-    pos[data["reg1"] & filter_3B] = 1.0
+    pos[data["reg0"] & filter_3B] = 1.0
     return pos
 
 
-# ----------------------------------------
 # Strategy 3 — combined A + B
-# ----------------------------------------
 def strategy_3(idx, data):
     return strategy_3A(idx, data) + strategy_3B(idx, data)
 
@@ -187,5 +177,15 @@ def run_all_strategies(pred_regime_today, df):
             "returns": pos * data["ret_next"],
             "performance": perf,
         }
+
+    bh_positions = pd.Series(1.0, index=idx)
+    bh_returns = data["ret_next"]
+    bh_perf = perf_stats(bh_returns)
+
+    results["buy_and_hold"] = {
+        "positions": bh_positions,
+        "returns": bh_returns,
+        "performance": bh_perf,
+    }
 
     return results
