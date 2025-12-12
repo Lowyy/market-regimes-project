@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import adfuller, kpss
 from hurst import compute_Hc
 
 DPY = 252  # trading days per year
@@ -27,19 +26,6 @@ def calculate_rsi(close: pd.Series, window: int = 20) -> pd.Series:
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
-
-
-def adf_test(series: pd.Series) -> float:
-    """Return ADF test p-value for a series."""
-    result = adfuller(series.dropna())
-    return result[1]
-
-
-def kpss_test(series: pd.Series) -> float:
-    """Return KPSS test p-value for a series."""
-    result = kpss(series.dropna(), nlags="auto")
-    return result[1]
-
 
 def hurst_exponent(series: pd.Series, window: int) -> pd.Series:
     """Rolling Hurst exponent using compute_Hc with kind='change'."""
