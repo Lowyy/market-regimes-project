@@ -100,7 +100,7 @@ def main() -> None:
     print("\n  ML results by split/model:")
     print(results_df)
 
-    # Majority-vote prediction for MAIN_SPLIT_NAME
+    # Majority-votes prediction for MAIN_SPLIT_NAME
     print(f"\n[Step 6] Building majority-vote predictions for split: {MAIN_SPLIT_NAME}")
     vote_pred = modeling.build_majority_vote(
         preds_df=preds_df,
