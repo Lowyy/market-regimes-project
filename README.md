@@ -3,11 +3,13 @@
 
 ## Project Overview
 
-This project studies how changing market conditions influence the performance of simple quantitative trading strategies. The core idea is to identify market regimes from historical data using unsupervised learning, assess whether these regimes can be predicted one day ahead using supervised models, and evaluate how different strategies behave across regimes.
+This project investigates whether market regimes inferred from historical price and volatility dynamics can be used to condition and improve systematic trading strategies relative to a buy-and-hold benchmark on the S&P 500.
 
-The analysis focuses on daily data from the S&P 500 and the VIX. Market regimes are extracted from a set of engineered return, volatility, and momentum features. These regimes are then used both directly and through predicted signals to drive rule-based trading strategies.
+Using daily data from the S&P 500 and the VIX, a broad set of return, volatility, momentum, and risk-related features is constructed. These features are analysed in both a raw scaled space and a PCA-reduced space and used to identify latent market regimes through unsupervised learning methods, including K-Means and Gaussian Mixture Models. The resulting regimes are examined to assess whether they capture distinct market environments and contain information relevant for trading decisions.
 
-The project is structured as a reproducible pipeline, with exploratory analysis conducted in notebooks and the final logic implemented in modular source files.
+Beyond regime identification, the project studies whether market regimes can be predicted one day ahead using supervised learning models trained on current market features. Logistic Regression, Random Forest, and Gradient Boosting models are evaluated using time-based walk-forward splits, and an ensemble approach is used to stabilise regime predictions.
+
+Finally, several rule-based trading strategies are designed to adapt their exposure based on the prevailing or predicted regime. Their performance is compared to a buy-and-hold strategy using standard risk-adjusted metrics. The objective is not only to test simple strategies, but to assess whether regime information can be integrated into systematic decision-making in a way that leads to more robust performance across different market conditions.
 
 ---
 
@@ -61,7 +63,7 @@ FinalProject/
    A broad set of features is constructed, including returns, realized volatility, drawdowns, momentum indicators, volatility risk premium proxies, and interaction terms.
 
 3. **Unsupervised learning (regimes)**
-   Market regimes are identified using K-Means and Gaussian Mixture Models. Both raw scaled features and PCA-reduced representations are evaluated, with clustering quality assessed using standard criteria.
+   Market regimes are identified using K-Means and Gaussian Mixture Models. Both raw scaled features and PCA-reduced representations are evaluated, with clustering quality assessed using standard criteria. The final pipeline relies on the approach that provided the most stable and interpretable regimes, with full comparisons documented in the exploratory notebooks and report.
 
 4. **Supervised learning (regime prediction)**
    Logistic Regression, Random Forest, and Gradient Boosting models are trained to predict tomorrow’s regime based on today’s features. Time-ordered train/test splits are used to avoid look-ahead bias.
