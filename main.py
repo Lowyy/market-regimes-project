@@ -44,11 +44,11 @@ def main() -> None:
     df_proc = processing.prepare_market_data(df_raw)
     print(f"  Processed data shape: {df_proc.shape}")
 
-    data_loader.save_processed_data(df_proc, filename="processed_data.parquet")
-
     print("\n[Step 3] Adding SPX/VIX features ...")
     df_with_features = feature_engineering.add_spx_vix_features(df_proc)
     print(f"  Data with features shape: {df_with_features.shape}")
+
+    data_loader.save_processed_data(df_with_features, filename="processed_data.parquet")
 
     # Unsupervised regimes: PCA + KMeans
     print("\n[Step 4] Building feature matrix and running PCA/KMeans ...")
