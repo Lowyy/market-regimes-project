@@ -35,6 +35,22 @@ def perf_stats(returns: pd.Series, freq: int = 252):
         "max_drawdown": max_dd,
     }
 
+# ==========================================================================================
+# 1B. EXPOSURE STATS (cash / invested / long / short)
+# ==========================================================================================
+
+def exposure_stats(positions: pd.Series) -> dict:
+    """
+    Compute share of days in cash / invested.
+    positions are typically in {-1, 0, +1}.
+    """
+    p = positions.fillna(0.0)
+
+    return {
+        "cash_pct": float((p == 0).mean()),
+        "invested_pct": float((p != 0).mean()),
+
+    }
 
 # ==========================================================================================
 # 2. DATA ALIGNMENT
@@ -52,6 +68,8 @@ def align_data_for_strategies(df, pred_regime_today):
         "ret_5d": df.loc[idx, "5d_return"],
 
         # price / momentum features
+        "ma20" : df.loc[idx, "MA_20"],
+        "ma200": df.loc[idx, "MA_200"],
         "sma20": df.loc[idx, "slope_MA_20"],
         "sma50": df.loc[idx, "slope_MA_50"],
         "rsi": df.loc[idx, "RSI_20"],
@@ -88,11 +106,11 @@ def strategy_1(idx, data):
 def strategy_2(idx, data):
     pos = pd.Series(0.0, index=idx)
 
-    long_mom = data["reg0"] & (data["sma50"] > 0) & data["rsi"].between(50, 70)
-    short_mom = data["reg1"] & (data["sma50"] < 0) & data["rsi"].between(30, 40)
+    long_mom = data["reg0"] & (data["ma20"] > data["ma200"])
+    short_mom = data["reg1"] & (data["sma20"] > 0)
 
     pos[long_mom] = 1.0
-    pos[short_mom] = -1.0
+    pos[short_mom] = 1.0
     return pos
 
 
@@ -123,7 +141,7 @@ def strategy_3B(idx, data):
 
     filter_3B = (
         data["vix_z"].rolling(5).max() < 2
-    ) & (data["vol_ratio"] > 0.6)
+    )
 
     pos[data["reg0"] & filter_3B] = 1.0
     return pos
@@ -170,22 +188,24 @@ def run_all_strategies(pred_regime_today, df):
 
     for strat in strategies:
         pos = compute_strategy_positions(strat, idx, data)
-        perf = evaluate_strategy(pos, data["ret_next"])
+        ret = pos * data["ret_next"]
 
         results[strat] = {
             "positions": pos,
-            "returns": pos * data["ret_next"],
-            "performance": perf,
+            "returns": ret,
+            "performance": perf_stats(ret),
+            "exposure": exposure_stats(pos),
         }
 
+        # Buy & hold
     bh_positions = pd.Series(1.0, index=idx)
     bh_returns = data["ret_next"]
-    bh_perf = perf_stats(bh_returns)
 
     results["buy_and_hold"] = {
         "positions": bh_positions,
         "returns": bh_returns,
-        "performance": bh_perf,
+        "performance": perf_stats(bh_returns),
+        "exposure": exposure_stats(bh_positions),
     }
 
     return results
