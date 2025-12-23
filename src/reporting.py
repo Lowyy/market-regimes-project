@@ -1,13 +1,16 @@
 from pathlib import Path
-from typing import Dict, Optional, Iterable
+from typing import Dict, Optional, Iterable, Tuple
 import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from sklearn.metrics import confusion_matrix, roc_curve, auc
+from sklearn.metrics import confusion_matrix, roc_curve, auc, silhouette_score
+
 from src.data_loader import PROJECT_ROOT
 from src.clustering import core  # for DEFAULT_FEATURE_COLS
+from src.clustering import sweeps
+from src import modeling
 
 # ****************************************************************************
 # 0. Paths & helpers
@@ -166,6 +169,115 @@ def summarize_regimes(
     summary.to_csv(results_dir / "regime_summary_stats.csv")
     return summary
 
+def run_clustering_model_selection_reporting(
+    X_scaled: np.ndarray,
+    X_pca_reduced: np.ndarray,
+    k_range: range,
+    results_dir: Path = RESULTS_DIR,
+) -> None:
+    """
+    Create comparison tables and plots for:
+      - KMeans: inertia + silhouette (RAW vs PCA)
+      - GMM: BIC + AIC + silhouette (RAW vs PCA)
+
+    RAW means: scaled features (X_scaled).
+    PCA means: PCA-reduced features (X_pca_reduced).
+    """
+    _ensure_dir(results_dir)
+
+    k_min = int(min(k_range))
+    k_max = int(max(k_range))
+
+    # -------------------------
+    # KMeans: inertia + silhouette
+    # -------------------------
+    km_raw_df, km_raw_sil = sweeps.kmeans_sweep(X_scaled, k_min=k_min, k_max=k_max)
+    km_pca_df, km_pca_sil = sweeps.kmeans_sweep(X_pca_reduced, k_min=k_min, k_max=k_max)
+
+    km_raw_df = km_raw_df.copy()
+    km_raw_df["silhouette"] = km_raw_df["k"].map(km_raw_sil)
+    km_raw_df["space"] = "RAW"
+
+    km_pca_df = km_pca_df.copy()
+    km_pca_df["silhouette"] = km_pca_df["k"].map(km_pca_sil)
+    km_pca_df["space"] = "PCA"
+
+    km_all = pd.concat([km_raw_df, km_pca_df], ignore_index=True)
+    km_all.to_csv(results_dir / "kmeans_model_selection_raw_vs_pca.csv", index=False)
+
+    # Inertia plot
+    plt.figure(figsize=(7, 4))
+    for space, sub in km_all.groupby("space"):
+        plt.plot(sub["k"], sub["inertia"], marker="o", label=space)
+    plt.title("KMeans Inertia (Elbow) - RAW vs PCA")
+    plt.xlabel("Number of clusters (k)")
+    plt.ylabel("Inertia")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(results_dir / "kmeans_inertia_raw_vs_pca.png")
+    plt.close()
+
+    # Silhouette plot
+    plt.figure(figsize=(7, 4))
+    for space, sub in km_all.groupby("space"):
+        plt.plot(sub["k"], sub["silhouette"], marker="o", label=space)
+    plt.title("KMeans Silhouette - RAW vs PCA")
+    plt.xlabel("Number of clusters (k)")
+    plt.ylabel("Silhouette score")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(results_dir / "kmeans_silhouette_raw_vs_pca.png")
+    plt.close()
+
+    # -------------------------
+    # GMM: BIC + AIC + silhouette
+    # -------------------------
+    gmm_raw = sweeps.gmm_sweep_labeled(X_scaled, space="RAW", k_min=k_min, k_max=k_max)
+    gmm_pca = sweeps.gmm_sweep_labeled(X_pca_reduced, space="PCA", k_min=k_min, k_max=k_max)
+
+    gmm_all = pd.concat([gmm_raw, gmm_pca], ignore_index=True)
+    gmm_all.to_csv(results_dir / "gmm_model_selection_raw_vs_pca.csv", index=False)
+
+    # BIC plot
+    plt.figure(figsize=(7, 4))
+    for space, sub in gmm_all.groupby("space"):
+        plt.plot(sub["k"], sub["bic"], marker="o", label=space)
+    plt.title("GMM BIC - RAW vs PCA")
+    plt.xlabel("Number of components (k)")
+    plt.ylabel("BIC (lower is better)")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(results_dir / "gmm_bic_raw_vs_pca.png")
+    plt.close()
+
+    # AIC plot
+    plt.figure(figsize=(7, 4))
+    for space, sub in gmm_all.groupby("space"):
+        plt.plot(sub["k"], sub["aic"], marker="o", label=space)
+    plt.title("GMM AIC - RAW vs PCA")
+    plt.xlabel("Number of components (k)")
+    plt.ylabel("AIC (lower is better)")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(results_dir / "gmm_aic_raw_vs_pca.png")
+    plt.close()
+
+    # Silhouette plot
+    plt.figure(figsize=(7, 4))
+    for space, sub in gmm_all.groupby("space"):
+        plt.plot(sub["k"], sub["silhouette"], marker="o", label=space)
+    plt.title("GMM Silhouette - RAW vs PCA")
+    plt.xlabel("Number of components (k)")
+    plt.ylabel("Silhouette score")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(results_dir / "gmm_silhouette_raw_vs_pca.png")
+    plt.close()
 
 # ****************************************************************************
 # 3. Machine learning reporting (supervised regime prediction)
@@ -239,7 +351,6 @@ def plot_confusion_matrix_and_roc(
     for (i, j), val in np.ndenumerate(cm_norm):
         plt.text(j, i, f"{val:.2f}", ha="center", va="center", color="black")
 
-    plt.tight_layout()
     plt.savefig(results_dir / f"cm_{model_name}_{split_name.replace(' ', '_')}.png")
     plt.close()
 
@@ -318,6 +429,89 @@ def compute_transition_matrices(
         "pred": pred_trans,
     }
 
+def run_supervised_explainability_reporting(
+    df_sup: pd.DataFrame,
+    X_all: pd.DataFrame,
+    y_all: pd.Series,
+    splits: Dict[str, Tuple[str, str, str, str]],
+    results_dir: Path = RESULTS_DIR,
+    top_n: int = 25,
+) -> None:
+    """
+    Refit models on each split and export:
+      - LogisticRegression coefficients
+      - RandomForest feature_importances_
+      - GradientBoosting feature_importances_
+
+    Saves CSV + a bar plot per (split, model).
+    """
+    _ensure_dir(results_dir)
+
+    feature_names = list(X_all.columns)
+    models_dict = modeling.get_models()
+
+    for split_name, (tr_start, tr_end, te_start, te_end) in splits.items():
+        mask_train = (df_sup.index >= tr_start) & (df_sup.index <= tr_end)
+
+        X_train = X_all.loc[mask_train]
+        y_train = y_all.loc[mask_train]
+
+        for model_name, model_obj in models_dict.items():
+            model = model_obj
+            model.fit(X_train, y_train)
+
+            # Extract importances / coefficients
+            if model_name == "LogisticRegression":
+                clf = model.named_steps["clf"]
+                coef = clf.coef_.ravel()
+                imp = pd.Series(coef, index=feature_names, name="coef").sort_values(key=np.abs, ascending=False)
+                out_df = imp.to_frame()
+                out_csv = results_dir / f"explain_lr_coefs_{split_name.replace(' ', '_')}.csv"
+                out_df.to_csv(out_csv)
+
+                # Plot
+                plot_s = imp.head(top_n).iloc[::-1]
+                plt.figure(figsize=(8, 6))
+                plt.barh(plot_s.index, plot_s.values)
+                plt.title(f"Logistic Regression - Top coefficients ({split_name})")
+                plt.xlabel("Coefficient")
+                plt.tight_layout()
+                plt.savefig(results_dir / f"explain_lr_coefs_{split_name.replace(' ', '_')}.png")
+                plt.close()
+
+            elif model_name == "RandomForest":
+                importances = model.feature_importances_
+                imp = pd.Series(importances, index=feature_names, name="feature_importance").sort_values(ascending=False)
+                out_df = imp.to_frame()
+                out_csv = results_dir / f"explain_rf_importance_{split_name.replace(' ', '_')}.csv"
+                out_df.to_csv(out_csv)
+
+                plot_s = imp.head(top_n).iloc[::-1]
+                plt.figure(figsize=(8, 6))
+                plt.barh(plot_s.index, plot_s.values)
+                plt.title(f"Random Forest - Top feature importance ({split_name})")
+                plt.xlabel("Importance")
+                plt.tight_layout()
+                plt.savefig(results_dir / f"explain_rf_importance_{split_name.replace(' ', '_')}.png")
+                plt.close()
+
+            elif model_name == "GradientBoosting":
+                clf = model.named_steps["clf"]
+                importances = clf.feature_importances_
+                imp = pd.Series(importances, index=feature_names, name="feature_importance").sort_values(ascending=False)
+                out_df = imp.to_frame()
+                out_csv = results_dir / f"explain_gb_importance_{split_name.replace(' ', '_')}.csv"
+                out_df.to_csv(out_csv)
+
+                plot_s = imp.head(top_n).iloc[::-1]
+                plt.figure(figsize=(8, 6))
+                plt.barh(plot_s.index, plot_s.values)
+                plt.title(f"Gradient Boosting - Top feature importance ({split_name})")
+                plt.xlabel("Importance")
+                plt.tight_layout()
+                plt.savefig(results_dir / f"explain_gb_importance_{split_name.replace(' ', '_')}.png")
+                plt.close()
+
 
 # ****************************************************************************
 # 4. Strategy reporting
@@ -346,7 +540,13 @@ def summarize_strategy_performance(
         perf_rows[name] = res["performance"]
 
     perf_df = pd.DataFrame.from_dict(perf_rows, orient="index")
-    perf_df.to_csv(results_dir / "strategy_performance.csv")
+
+    exp_rows = {name: res.get("exposure", {}) for name, res in strategy_results.items()}
+
+    exp_df = pd.DataFrame.from_dict(exp_rows, orient="index")
+
+    merged = perf_df.join(exp_df, how="left")
+    merged.to_csv(results_dir / "strategy_performance.csv")
 
     return perf_df
 
@@ -426,41 +626,49 @@ def run_full_reporting(
     df_assigned: pd.DataFrame,
     idx_features: pd.Index,
     pca,
-    results_df: pd.DataFrame,
-    preds_df: pd.DataFrame,
-    strategy_results: Dict[str, Dict[str, object]],
+    X_scaled: Optional[np.ndarray] = None,
+    X_pca_reduced: Optional[np.ndarray] = None,
+    k_range: Optional[range] = None,
+    splits: Optional[Dict[str, tuple]] = None,
+    df_sup: Optional[pd.DataFrame] = None,
+    X_all: Optional[pd.DataFrame] = None,
+    y_all: Optional[pd.Series] = None,
+    results_df: pd.DataFrame = None,
+    preds_df: pd.DataFrame = None,
+    strategy_results: Dict[str, Dict[str, object]] = None,
     split_for_diagnostics: str = "2010-20 to 2021-24",
     model_for_diagnostics: str = "LogisticRegression",
     results_dir: Path = RESULTS_DIR,
 ) -> None:
     """
     High-level function to be called from main.py.
-
-    It assumes:
-      - df_with_features: dataframe after feature_engineering.add_spx_vix_features
-      - df_assigned     : df_with_features + KMeans_Regime column
-      - idx_features    : index of rows used in clustering (from build_feature_matrix)
-      - pca             : fitted PCA object (from core.pca_analysis)
-      - results_df      : metrics output from modeling.run_splits
-      - preds_df        : detailed predictions from modeling.run_splits
-      - strategy_results: output from strategies.run_all_strategies
-
-    It will create and save all the “useful” plots/tables.
+    It will create and save all the useful plots/tables.
     """
     _ensure_dir(results_dir)
 
-    # Creation of a logs to follow the advancements of the reporting
     def log(msg: str):
         print(msg)
         sys.stdout.flush()
 
     # 1. PCA diagnostics
-    log("\n[1/4] Summerising PCA results ...")
+    log("\n[1/6] Summarising PCA results ...")
     plot_pca_variance(pca, results_dir=results_dir)
     save_pca_loadings(pca, feature_cols=core.DEFAULT_FEATURE_COLS, results_dir=results_dir)
 
-    # 2. Regimes / clustering
-    log("\n[2/4] Describing regimes and clustering (KMeans)...")
+    # 2. Clustering model selection comparisons (RAW vs PCA)
+    if (X_scaled is not None) and (X_pca_reduced is not None) and (k_range is not None):
+        log("\n[2/6] Clustering model selection (KMeans + GMM) on RAW vs PCA ...")
+        run_clustering_model_selection_reporting(
+            X_scaled=X_scaled,
+            X_pca_reduced=X_pca_reduced,
+            k_range=k_range,
+            results_dir=results_dir,
+        )
+    else:
+        log("\n[2/6] Skipping clustering model selection reporting (missing X_scaled/X_pca_reduced/k_range).")
+
+    # 3. Regimes / clustering visuals and summary (final choice)
+    log("\n[3/6] Describing regimes and clustering (KMeans) ...")
     plot_sp500_with_regimes(
         df_prices=df_assigned,
         idx_features=idx_features,
@@ -469,17 +677,17 @@ def run_full_reporting(
     )
     summarize_regimes(df_assigned, regime_col="KMeans_Regime", results_dir=results_dir)
 
-    # 3. ML results
-    log("\n[3/4] Summarising ML results & diagnostics...")
+    # 4. ML results
+    log("\n[4/6] Summarising ML results & diagnostics ...")
     summarize_ml_results(results_df, results_dir=results_dir)
-    log(f"    → Confusion matrix & ROC for {model_for_diagnostics} – {split_for_diagnostics}")
+    log(f"    -> Confusion matrix & ROC for {model_for_diagnostics} - {split_for_diagnostics}")
     plot_confusion_matrix_and_roc(
         preds_df,
         split_name=split_for_diagnostics,
         model_name=model_for_diagnostics,
         results_dir=results_dir,
     )
-    log("    → Transition matrices (true vs predicted regimes)")
+    log("    -> Transition matrices (true vs predicted regimes)")
     compute_transition_matrices(
         df_assigned,
         preds_df,
@@ -489,8 +697,22 @@ def run_full_reporting(
         results_dir=results_dir,
     )
 
-    # 4. Strategies
-    log("\n[4/4] Evaluating strategies and plotting equity curves...")
+    # 5. Supervised explainability (coefficients + feature importance)
+    if (df_sup is not None) and (X_all is not None) and (y_all is not None) and (splits is not None):
+        log("\n[5/6] Supervised explainability (coefficients / feature importance) ...")
+        run_supervised_explainability_reporting(
+            df_sup=df_sup,
+            X_all=X_all,
+            y_all=y_all,
+            splits=splits,
+            results_dir=results_dir,
+            top_n=25,
+        )
+    else:
+        log("\n[5/6] Skipping supervised explainability reporting (missing df_sup/X_all/y_all/splits).")
+
+    # 6. Strategies
+    log("\n[6/6] Evaluating strategies and plotting equity curves ...")
     summarize_strategy_performance(strategy_results, results_dir=results_dir)
     plot_equity_curves(strategy_results, results_dir=results_dir)
 
