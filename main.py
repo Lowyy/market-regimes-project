@@ -28,6 +28,8 @@ SPLITS = {
     "2003-15 to 2016-20": ("2003-01-01", "2015-12-31", "2016-01-01", "2020-12-31"),
 }
 
+# Clustering diagnostics range (used only for reporting comparisons)
+K_RANGE = range(2, 9)
 
 # ---------------------------------------------------------------------
 # Main pipeline
@@ -138,6 +140,10 @@ def main() -> None:
         df_assigned=df_assigned,
         idx_features=idx_features,
         pca=pca,
+        X_scaled=X_scaled,
+        X_pca_reduced=X_pca_reduced,
+        k_range=K_RANGE,
+        splits=SPLITS,
         results_df=results_df,
         preds_df=preds_df,
         strategy_results=strategy_results,
